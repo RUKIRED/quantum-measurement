@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D量子振幅増幅シミュレーション (確率表示付き)</title>
+    <title>3D量子振幅増幅シミュレーション (光源固定・確率表示付き)</title>
     <style>
         body {
             margin: 0;
@@ -124,7 +124,7 @@
             <hr style="border-color: #555; margin: 10px 0;">
             <div><span class="label">TARGET PROBABILITY:</span> <span id="target-probability" class="target-num">0.000%</span></div>
             <div class="prob-bar-container"><div id="probability-bar"></div></div>
-            </div>
+        </div>
 
         <div id="plane-container">
             <div class="label" style="text-align: center; margin-bottom: 5px;">2D Subspace (Grover Plane)</div>
@@ -294,7 +294,7 @@
         }
 
         // ==========================================
-        //  Three.js Setup (省略)
+        //  Three.js Setup
         // ==========================================
         const container = document.getElementById('webgl-container');
         const scene = new THREE.Scene();
@@ -307,19 +307,26 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.shadowMap.enabled = true;
         container.appendChild(renderer.domElement);
+        
+        // --- 光源の設定 ---
         const ambientLight = new THREE.AmbientLight(0x333333);
         scene.add(ambientLight);
-        const spotLight = new THREE.SpotLight(0xffffff, 1);
-        spotLight.position.set(50, 80, 30);
-        spotLight.angle = Math.PI / 4;
-        spotLight.penumbra = 0.1;
-        spotLight.decay = 2;
-        spotLight.distance = 200;
-        spotLight.castShadow = true;
+
+        // スポットライト (固定)
+        const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+        // カメラの上前方に配置し、バーの中心を向ける
+        spotLight.position.set(20, 100, 50); 
+        spotLight.target.position.set(0, 10, 0);
         scene.add(spotLight);
-        const bluePointLight = new THREE.PointLight(0x00d4ff, 2, 100);
+        scene.add(spotLight.target); // ターゲットを追加しないと光の向きが変わらない
+
+        // ブルーポイントライト (固定)
+        const bluePointLight = new THREE.PointLight(0x00d4ff, 4, 150);
+        // バーの中心近くに配置し、ターゲットの増幅に応じて明るさだけを変える
         bluePointLight.position.set(0, 20, 0);
         scene.add(bluePointLight);
+        // -----------------
+
         const floorGeometry = new THREE.PlaneGeometry(300, 300);
         const floorMaterial = new THREE.MeshStandardMaterial({ 
             color: 0x080808, metalness: 0.8, roughness: 0.2, side: THREE.DoubleSide
@@ -394,7 +401,6 @@
             update3DView(amplitudes);
             cameraShake(0.5);
 
-            // 初期ログと確率表示
             const initialProb = initialAmp * initialAmp;
             appendLog(`RESET`, `初期確率: <span class="log-prob">${(initialProb * 100).toFixed(3)}%</span> (N=${numStates})`);
             updateProbabilityDisplay(initialProb);
@@ -424,7 +430,6 @@
             const targetAmplitude = Math.abs(nextAmps[targetIndex]);
             playRotateSound(targetAmplitude);
             
-            // ログ開始
             appendLog(`--- START ROTATION ${rotationCount} ---`, `目標振幅: <span class="log-amp">${targetAmplitude.toFixed(4)}</span>`);
 
             animateTransition(oracleAmps, nextAmps);
@@ -467,7 +472,7 @@
                     isAnimating = false;
                     
                     const { angle, amp, prob } = draw2DPlane(currentAmps, targetIndex, numStates);
-                    updateProbabilityDisplay(prob); // 確率更新
+                    updateProbabilityDisplay(prob);
                     appendLog(`--- ROTATION ${rotationCount} COMPLETE ---`, 
                         `確率: <span class="log-prob">${(prob * 100).toFixed(3)}%</span> | 
                         振幅: <span class="log-amp">${amp.toFixed(4)}</span> | 
@@ -479,7 +484,7 @@
                 
                 if (isAnimating) {
                     const { angle, amp, prob } = draw2DPlane(currentAmps, targetIndex, numStates);
-                    updateProbabilityDisplay(prob); // アニメーション中も確率を更新
+                    updateProbabilityDisplay(prob);
                     
                     if(logContent.firstChild && logContent.firstChild.classList.contains('log-entry')) {
                         logContent.firstChild.querySelector('.log-detail').innerHTML = 
@@ -527,8 +532,10 @@
         
         function animate() {
             requestAnimationFrame(animate);
-            barGroup.rotation.y += 0.002;
-
+            // バーの回転は維持
+            barGroup.rotation.y += 0.002; 
+            // 光源の位置は固定されているため、ここでは更新しない
+            
             if (shakeIntensity > 0) {
                 camera.position.x += (Math.random() - 0.5) * shakeIntensity;
                 camera.position.y = baseCameraY + (Math.random() - 0.5) * shakeIntensity;
