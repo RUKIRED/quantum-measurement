@@ -19,7 +19,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 20px;
             border-radius: 10px;
-            border: 1px solid #ff7300; /* UI枠の色もオレンジ系に合わせる */
+            border: 1px solid #ff7300; 
             box-shadow: 0 0 20px rgba(255, 115, 0, 0.3);
             min-width: 250px;
             display: flex;
@@ -40,7 +40,7 @@
         }
         #probability-bar {
             height: 100%;
-            background: linear-gradient(90deg, #ff7300, #ffa500); /* バーもオレンジ系に */
+            background: linear-gradient(90deg, #ff7300, #ffa500);
             transition: width 0.3s ease;
         }
         .controls { display: flex; gap: 10px; }
@@ -49,7 +49,7 @@
         #plane-container {
             border: 1px solid #ff7300;
             border-radius: 8px;
-            background: rgba(80, 50, 0, 0.3); /* 背景色も調整 */
+            background: rgba(80, 50, 0, 0.3);
             box-shadow: 0 0 10px rgba(255, 115, 0, 0.3);
             padding: 5px;
         }
@@ -88,11 +88,8 @@
             color: #ccc;
             margin-left: 10px;
         }
-        /* ターゲット振幅: 青 -> オレンジ */
         .log-amp { color: #ff7300; font-weight: bold; } 
-        /* 回転角度: 黄色 -> 変更なし */
         .log-angle { color: #ffeb3b; font-weight: bold; } 
-        /* ターゲット確率: ピンク -> 明るいオレンジ */
         .log-prob { color: #ffb347; font-weight: bold; } 
 
         button {
@@ -106,7 +103,6 @@
             text-transform: uppercase;
         }
         #btn-rotate {
-            /* ボタンもオレンジ系に */
             background: linear-gradient(45deg, #ff7300, #ffa500); 
             color: #fff;
             box-shadow: 0 0 10px rgba(255, 115, 0, 0.5);
@@ -214,7 +210,6 @@
         const center = planeSize / 2;
         const radius = planeSize * 0.45;
 
-        // ターゲットベクトルはオレンジにする
         const TARGET_VECTOR_COLOR = '#ff7300'; 
         const TARGET_LABEL_COLOR = '#ff7300';
 
@@ -254,7 +249,7 @@
             // 単位円
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 115, 0, 0.2)'; // オレンジの薄い色
+            ctx.strokeStyle = 'rgba(255, 115, 0, 0.2)';
             ctx.stroke();
 
             // 軸の描画
@@ -318,21 +313,24 @@
         
         // --- 光源の設定 ---
         
-        const ambientLight = new THREE.AmbientLight(0x333333);
+        // 1. 環境光 (AmbientLight) - 【調整】全体を明るくするため、強度を0x333333 -> 0x555555 に上げる
+        const ambientLight = new THREE.AmbientLight(0x555555);
         scene.add(ambientLight);
 
-        const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x444444, 0.4);
+        // 2. 半球ライト (HemisphereLight) - 【調整】下からの光を強化し、陰を明るくする
+        const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x666666, 0.6); // 強度を0.4 -> 0.6に上げる
         scene.add(hemisphereLight);
 
-        const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+        // 3. スポットライト (固定) - 【調整】強度を上げる
+        const spotLight = new THREE.SpotLight(0xffffff, 2.0); // 強度を1.5 -> 2.0に上げる
         spotLight.position.set(20, 100, 50); 
         spotLight.target.position.set(0, 10, 0);
         scene.add(spotLight);
         scene.add(spotLight.target);
 
-        // 4. オレンジポイントライト (固定) - 【変更点】色の修正
-        const ORANGE_POINT_COLOR = 0xffa500; // オレンジ色
-        const orangePointLight = new THREE.PointLight(ORANGE_POINT_COLOR, 4, 150);
+        // 4. オレンジポイントライト (固定)
+        const ORANGE_POINT_COLOR = 0xffa500; 
+        const orangePointLight = new THREE.PointLight(ORANGE_POINT_COLOR, 5, 150); // 強度を4 -> 5に上げる
         orangePointLight.position.set(0, 20, 0);
         scene.add(orangePointLight);
         // -----------------
@@ -354,7 +352,8 @@
         barGeometry.translate(0, 0.5, 0); 
         for (let i = 0; i < numStates; i++) {
             const material = new THREE.MeshStandardMaterial({
-                color: 0x222222, emissive: 0x000000, metalness: 0.5, roughness: 0.5, transparent: true, opacity: 0.9
+                // 非ターゲットバーの色を少し明るくする
+                color: 0x333333, emissive: 0x000000, metalness: 0.5, roughness: 0.5, transparent: true, opacity: 0.9
             });
             const bar = new THREE.Mesh(barGeometry, material);
             const angle = (i / numStates) * Math.PI * 2;
@@ -397,14 +396,13 @@
             targetIndex = Math.floor(Math.random() * numStates);
             document.getElementById('target-index').innerText = targetIndex;
             
-            // ターゲットバーの色もオレンジ系に変更
             bars.forEach((bar, i) => {
                 if (i === targetIndex) {
                     bar.material.color.setHex(0xff7300); 
                     bar.material.emissive.setHex(0xffa500);
-                    bar.material.emissiveIntensity = 0.5;
+                    bar.material.emissiveIntensity = 0.8; // ターゲット発光を強化
                 } else {
-                    bar.material.color.setHex(0x222222);
+                    bar.material.color.setHex(0x333333); // ベース色を0x222222 -> 0x333333に
                     bar.material.emissive.setHex(0x000000);
                 }
             });
@@ -522,9 +520,8 @@
                 bars[i].scale.y = h;
                 
                 if (i === targetIndex) {
-                    bars[i].material.emissiveIntensity = 0.5 + h * 0.1;
-                    // orangePointLight の強度を振幅に応じて変更
-                    orangePointLight.intensity = 2 + h * 0.5;
+                    bars[i].material.emissiveIntensity = 0.8 + h * 0.15; // 発光をさらに強化
+                    orangePointLight.intensity = 5 + h * 1; // ポイントライトの強度増加を強化
                 }
             }
             draw2DPlane(currentAmps, targetIndex, numStates);
