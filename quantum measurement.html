@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>3D量子振幅増幅シミュレーション (確率表示付き)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            color: #eee;
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            min-width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        h2 { margin: 0; font-size: 1.2rem; color: #00d4ff; text-transform: uppercase; letter-spacing: 1px; }
+        .info { font-size: 0.9rem; line-height: 1.6; }
+        .label { color: #aaa; font-size: 0.8rem; letter-spacing: 1px; }
+        .target-num { color: #00d4ff; font-weight: bold; font-size: 1.2rem; margin-left: 5px; }
+        .prob-bar-container {
+            width: 100%;
+            height: 15px;
+            background-color: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        #probability-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #005eff, #00d4ff);
+            transition: width 0.3s ease;
+        }
+        .controls { display: flex; gap: 10px; }
+        
+        /* 2Dキャンバスのスタイル */
+        #plane-container {
+            border: 1px solid #00d4ff;
+            border-radius: 8px;
+            background: rgba(0, 50, 80, 0.3);
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+            padding: 5px;
+        }
+        #quantum-plane {
+            display: block;
+        }
+        
+        /* 処理ログのスタイル */
+        #log-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            width: 350px;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #ff7300;
+            box-shadow: 0 0 20px rgba(255, 115, 0, 0.3);
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+        .log-entry {
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed #333;
+        }
+        .log-header {
+            color: #ff7300;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .log-detail {
+            color: #ccc;
+            margin-left: 10px;
+        }
+        .log-amp { color: #00d4ff; font-weight: bold; }
+        .log-angle { color: #ffeb3b; font-weight: bold; }
+        .log-prob { color: #ff4dff; font-weight: bold; }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        #btn-rotate {
+            background: linear-gradient(45deg, #00d4ff, #005eff);
+            color: #fff;
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+        #btn-rotate:hover { background: linear-gradient(45deg, #00a3cc, #004ecc); box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+        #btn-rotate:active { transform: scale(0.98); }
+        #btn-reset { background-color: #333; color: #ccc; border: 1px solid #555; }
+        #btn-reset:hover { background-color: #444; color: #fff; border-color: #777; }
+        #webgl-container { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <h2>Quantum Amplitude Amplification</h2>
+        <div class="info">
+            <div><span class="label">TARGET STATE:</span> <span id="target-index" class="target-num">--</span></div>
+            <div><span class="label">ROTATIONS:</span> <span id="iter-count" class="target-num">0</span></div>
+            <hr style="border-color: #555; margin: 10px 0;">
+            <div><span class="label">TARGET PROBABILITY:</span> <span id="target-probability" class="target-num">0.000%</span></div>
+            <div class="prob-bar-container"><div id="probability-bar"></div></div>
+            </div>
+
+        <div id="plane-container">
+            <div class="label" style="text-align: center; margin-bottom: 5px;">2D Subspace (Grover Plane)</div>
+            <canvas id="quantum-plane" width="200" height="200"></canvas>
+        </div>
+
+        <div class="controls">
+            <button id="btn-rotate">ROTATE (Amplify)</button>
+            <button id="btn-reset">RESET</button>
+        </div>
+    </div>
+    
+    <div id="log-container">
+        <div class="log-header">--- Quantum Process Log ---</div>
+        <div id="log-content"></div>
+    </div>
+
+    <div id="webgl-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // ==========================================
+        //  Web Audio API Setup & Logging Logic
+        // ==========================================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const logContent = document.getElementById('log-content');
+        const targetProbDisplay = document.getElementById('target-probability');
+        const probBar = document.getElementById('probability-bar');
+        
+        function playRotateSound(amplitude) {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            const baseFreq = 200 + (amplitude * 800); 
+            oscillator.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(baseFreq * 1.2, audioCtx.currentTime + 1.0);
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1.2);
+        }
+
+        function playResetSound() {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function appendLog(header, details) {
+            const entry = document.createElement('div');
+            entry.classList.add('log-entry');
+            entry.innerHTML = `<div class="log-header">${header}</div><div class="log-detail">${details}</div>`;
+            logContent.prepend(entry);
+            
+            while (logContent.children.length > 50) {
+                logContent.removeChild(logContent.lastChild);
+            }
+        }
+        
+        function clearLog() {
+            logContent.innerHTML = '';
+        }
+
+
+        // ==========================================
+        //  2D Plane Rendering (Canvas API)
+        // ==========================================
+        const planeCanvas = document.getElementById('quantum-plane');
+        const ctx = planeCanvas.getContext('2d');
+        const planeSize = 200;
+        const center = planeSize / 2;
+        const radius = planeSize * 0.45;
+
+        function drawVector(x, y, color, width) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function draw2DPlane(currentAmps, targetIdx, N) {
+            ctx.clearRect(0, 0, planeSize, planeSize);
+
+            // 1. 座標の計算
+            const ampTarget = currentAmps[targetIdx];
+            let ampNonTargetSumSq = 0;
+            for (let i = 0; i < N; i++) {
+                if (i !== targetIdx) {
+                    ampNonTargetSumSq += currentAmps[i] * currentAmps[i];
+                }
+            }
+            const componentSPrime = Math.sqrt(ampNonTargetSumSq); 
+            const componentOmega = ampTarget; 
+            
+            ctx.save();
+            ctx.translate(center, center);
+            ctx.lineWidth = 1;
+            ctx.font = '10px Arial';
+
+            // 単位円
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+            ctx.stroke();
+
+            // 軸の描画
+            ctx.strokeStyle = '#555';
+            ctx.beginPath();
+            ctx.moveTo(-radius, 0); ctx.lineTo(radius, 0); 
+            ctx.moveTo(0, -radius); ctx.lineTo(0, radius); 
+            ctx.stroke();
+
+            // ラベル
+            ctx.fillStyle = '#00d4ff';
+            ctx.fillText("|ω⟩", 5, -radius - 5);
+            ctx.fillText("|s'⟩", radius + 5, 5);
+            
+            // 2. 初期状態 s の描画 (点線)
+            const theta = Math.asin(1 / Math.sqrt(N));
+            const initialX = Math.cos(theta) * radius;
+            const initialY = Math.sin(theta) * -radius;
+            
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.moveTo(0, 0);
+            ctx.lineTo(initialX, initialY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 3. 現在の状態ベクトルの描画
+            const vectorX = componentSPrime * radius;
+            const vectorY = componentOmega * -radius;
+            
+            drawVector(vectorX, vectorY, '#00d4ff', 3);
+
+            // 角度計算
+            const currentAngle = Math.atan2(componentSPrime, componentOmega);
+            const totalRotationAngleDeg = (currentAngle - theta) * (180 / Math.PI);
+            
+            ctx.restore();
+
+            // 確率の計算 (振幅の二乗)
+            const probability = componentOmega * componentOmega;
+
+            return { angle: totalRotationAngleDeg, amp: componentOmega, prob: probability };
+        }
+
+        // ==========================================
+        //  Three.js Setup (省略)
+        // ==========================================
+        const container = document.getElementById('webgl-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.008);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 80, 130);
+        camera.lookAt(0, 15, 0);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
+        const spotLight = new THREE.SpotLight(0xffffff, 1);
+        spotLight.position.set(50, 80, 30);
+        spotLight.angle = Math.PI / 4;
+        spotLight.penumbra = 0.1;
+        spotLight.decay = 2;
+        spotLight.distance = 200;
+        spotLight.castShadow = true;
+        scene.add(spotLight);
+        const bluePointLight = new THREE.PointLight(0x00d4ff, 2, 100);
+        bluePointLight.position.set(0, 20, 0);
+        scene.add(bluePointLight);
+        const floorGeometry = new THREE.PlaneGeometry(300, 300);
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x080808, metalness: 0.8, roughness: 0.2, side: THREE.DoubleSide
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = Math.PI / 2;
+        floor.position.y = -2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        const numStates = 32;
+        const bars = [];
+        const barGroup = new THREE.Group();
+        scene.add(barGroup);
+        const barGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
+        barGeometry.translate(0, 0.5, 0); 
+        for (let i = 0; i < numStates; i++) {
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x222222, emissive: 0x000000, metalness: 0.5, roughness: 0.5, transparent: true, opacity: 0.9
+            });
+            const bar = new THREE.Mesh(barGeometry, material);
+            const angle = (i / numStates) * Math.PI * 2;
+            const radius = 20;
+            bar.position.x = Math.cos(angle) * radius;
+            bar.position.z = Math.sin(angle) * radius;
+            bar.position.y = 0;
+            bar.castShadow = true;
+            bar.receiveShadow = true;
+            bar.lookAt(0, 0, 0);
+            bars.push(bar);
+            barGroup.add(bar);
+        }
+
+
+        // ==========================================
+        //  Quantum Logic
+        // ==========================================
+        let amplitudes = [];
+        let targetIndex = 0;
+        let isAnimating = false;
+        let rotationCount = 0;
+
+        function updateProbabilityDisplay(prob) {
+            targetProbDisplay.innerText = `${(prob * 100).toFixed(3)}%`;
+            probBar.style.width = `${prob * 100}%`;
+        }
+
+        function init() {
+            playResetSound();
+            clearLog();
+            
+            rotationCount = 0;
+            document.getElementById('iter-count').innerText = rotationCount;
+            amplitudes = [];
+            const initialAmp = 1 / Math.sqrt(numStates);
+            for (let i = 0; i < numStates; i++) {
+                amplitudes.push(initialAmp);
+            }
+            targetIndex = Math.floor(Math.random() * numStates);
+            document.getElementById('target-index').innerText = targetIndex;
+            
+            bars.forEach((bar, i) => {
+                if (i === targetIndex) {
+                    bar.material.color.setHex(0x00d4ff);
+                    bar.material.emissive.setHex(0x005eff);
+                    bar.material.emissiveIntensity = 0.5;
+                } else {
+                    bar.material.color.setHex(0x222222);
+                    bar.material.emissive.setHex(0x000000);
+                }
+            });
+            
+            update3DView(amplitudes);
+            cameraShake(0.5);
+
+            // 初期ログと確率表示
+            const initialProb = initialAmp * initialAmp;
+            appendLog(`RESET`, `初期確率: <span class="log-prob">${(initialProb * 100).toFixed(3)}%</span> (N=${numStates})`);
+            updateProbabilityDisplay(initialProb);
+        }
+
+        function rotate() {
+            if (isAnimating) return;
+            isAnimating = true;
+            rotationCount++;
+            document.getElementById('iter-count').innerText = rotationCount;
+
+            // 1. Oracle
+            let currentAmps = [...amplitudes];
+            let oracleAmps = [...currentAmps];
+            oracleAmps[targetIndex] = -oracleAmps[targetIndex];
+
+            // 2. Diffusion
+            let sum = 0;
+            for (let val of oracleAmps) sum += val;
+            let average = sum / numStates;
+
+            let nextAmps = [];
+            for (let val of oracleAmps) {
+                nextAmps.push(2 * average - val);
+            }
+            
+            const targetAmplitude = Math.abs(nextAmps[targetIndex]);
+            playRotateSound(targetAmplitude);
+            
+            // ログ開始
+            appendLog(`--- START ROTATION ${rotationCount} ---`, `目標振幅: <span class="log-amp">${targetAmplitude.toFixed(4)}</span>`);
+
+            animateTransition(oracleAmps, nextAmps);
+            cameraShake(0.5 + targetAmplitude); 
+        }
+
+        function animateTransition(oracleAmps, targetAmps) {
+            let startAmps = [...amplitudes];
+            let startTime = null;
+            const duration = 1000;
+            const phase1Duration = 300;
+            const phase2Duration = 700;
+
+            function loop(timestamp) {
+                if (!startTime) startTime = timestamp;
+                let timeElapsed = timestamp - startTime;
+                let currentAmps;
+                let phaseName;
+                
+                let progress;
+                let ease;
+
+                if (timeElapsed < phase1Duration) {
+                    // Phase 1: Oracle Reflection
+                    progress = timeElapsed / phase1Duration;
+                    ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                    currentAmps = startAmps.map((amp, i) => amp + (oracleAmps[i] - amp) * ease);
+                    phaseName = 'Oracle Reflection (R_ω)';
+
+                } else if (timeElapsed < duration) {
+                    // Phase 2: Diffusion Reflection
+                    progress = (timeElapsed - phase1Duration) / phase2Duration;
+                    ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                    currentAmps = oracleAmps.map((amp, i) => amp + (targetAmps[i] - amp) * ease);
+                    phaseName = 'Diffusion Reflection (R_s)';
+
+                } else {
+                    // Phase 3: Completion
+                    currentAmps = targetAmps;
+                    isAnimating = false;
+                    
+                    const { angle, amp, prob } = draw2DPlane(currentAmps, targetIndex, numStates);
+                    updateProbabilityDisplay(prob); // 確率更新
+                    appendLog(`--- ROTATION ${rotationCount} COMPLETE ---`, 
+                        `確率: <span class="log-prob">${(prob * 100).toFixed(3)}%</span> | 
+                        振幅: <span class="log-amp">${amp.toFixed(4)}</span> | 
+                        総回転角度: <span class="log-angle">${angle.toFixed(2)}°</span>`);
+                }
+                
+                amplitudes = currentAmps;
+                update3DView(currentAmps);
+                
+                if (isAnimating) {
+                    const { angle, amp, prob } = draw2DPlane(currentAmps, targetIndex, numStates);
+                    updateProbabilityDisplay(prob); // アニメーション中も確率を更新
+                    
+                    if(logContent.firstChild && logContent.firstChild.classList.contains('log-entry')) {
+                        logContent.firstChild.querySelector('.log-detail').innerHTML = 
+                        `確率: <span class="log-prob">${(prob * 100).toFixed(3)}%</span> | 
+                        振幅: <span class="log-amp">${amp.toFixed(4)}</span> | 
+                        角度: <span class="log-angle">${angle.toFixed(2)}°</span> | 
+                        処理: ${phaseName} `;
+                    }
+                    requestAnimationFrame(loop);
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function update3DView(currentAmps) {
+            const scaleMultiplier = 20; 
+            
+            for (let i = 0; i < numStates; i++) {
+                let amp = currentAmps[i];
+                let h = Math.abs(amp) * scaleMultiplier * Math.sqrt(numStates);
+                
+                if (h < 0.1) h = 0.1;
+                
+                bars[i].scale.y = h;
+                
+                if (i === targetIndex) {
+                    bars[i].material.emissiveIntensity = 0.5 + h * 0.1;
+                    bluePointLight.position.y = 10 + h * 2;
+                    bluePointLight.intensity = 2 + h * 0.5;
+                }
+            }
+            draw2DPlane(currentAmps, targetIndex, numStates);
+        }
+
+        let shakeIntensity = 0;
+        function cameraShake(intensity) {
+            shakeIntensity = intensity;
+        }
+
+
+        // ==========================================
+        //  Main Loop & Events
+        // ==========================================
+        let baseCameraY = camera.position.y;
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            barGroup.rotation.y += 0.002;
+
+            if (shakeIntensity > 0) {
+                camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+                camera.position.y = baseCameraY + (Math.random() - 0.5) * shakeIntensity;
+                camera.position.z += (Math.random() - 0.5) * shakeIntensity;
+                shakeIntensity *= 0.9;
+                if (shakeIntensity < 0.01) shakeIntensity = 0;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        document.body.addEventListener('click', () => {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }, { once: true });
+
+        document.getElementById('btn-rotate').addEventListener('click', rotate);
+        document.getElementById('btn-reset').addEventListener('click', init);
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
