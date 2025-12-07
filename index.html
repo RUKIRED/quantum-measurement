@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D量子振幅増幅シミュレーション (光源オレンジ・視認性向上)</title>
+    <title>3D量子振幅増幅シミュレーション (光源オレンジ・視認性向上・爽快な音)</title>
     <style>
         body {
             margin: 0;
@@ -158,15 +158,38 @@
         function playRotateSound(amplitude) {
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
-            oscillator.type = 'sine';
-            const baseFreq = 200 + (amplitude * 800); 
+            const delayNode = audioCtx.createDelay(1.0); // ディレイノードを追加 (最大1秒)
+            const feedbackGain = audioCtx.createGain();
+            
+            // 1. オシレーターの設定
+            oscillator.type = 'triangle'; // サイン波からトライアングル波に変更
+            const baseFreq = 250 + (amplitude * 500); // 周波数レンジを調整
             oscillator.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(baseFreq * 1.2, audioCtx.currentTime + 1.0);
+            // 周波数を少しずつ上昇させることで爽快感を出す
+            oscillator.frequency.linearRampToValueAtTime(baseFreq * 1.5, audioCtx.currentTime + 0.8);
+            
+            // 2. ゲインエンベロープ（音量変化）
             gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.05); // アタックを短く
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+            
+            // 3. ディレイの設定
+            delayNode.delayTime.setValueAtTime(0.3, audioCtx.currentTime); // 0.3秒ディレイ
+            feedbackGain.gain.setValueAtTime(0.4, audioCtx.currentTime); // フィードバック量
+            
+            // 4. ノード接続
             oscillator.connect(gainNode);
+            
+            // ディレイのフィードバックループ
+            gainNode.connect(delayNode);
+            delayNode.connect(feedbackGain);
+            feedbackGain.connect(delayNode); 
+            
+            // ドライ音とウェット音をアウトプットへ
             gainNode.connect(audioCtx.destination);
+            delayNode.connect(audioCtx.destination); 
+            
+            // 5. 実行
             oscillator.start();
             oscillator.stop(audioCtx.currentTime + 1.2);
         }
@@ -174,15 +197,23 @@
         function playResetSound() {
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            
+            // 1. オシレーターの設定
+            oscillator.type = 'sawtooth'; // ノコギリ波を維持するが、高周波で短いパルスとして扱う
+            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); // 高い周波数からスタート
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+            
+            // 2. ゲインエンベロープ
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3); // 短い減衰
+            
+            // 3. ノード接続
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
+            
+            // 4. 実行
             oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.5);
+            oscillator.stop(audioCtx.currentTime + 0.3); // 短くカット
         }
 
         function appendLog(header, details) {
@@ -313,24 +344,20 @@
         
         // --- 光源の設定 ---
         
-        // 1. 環境光 (AmbientLight) - 【調整】全体を明るくするため、強度を0x333333 -> 0x555555 に上げる
         const ambientLight = new THREE.AmbientLight(0x555555);
         scene.add(ambientLight);
 
-        // 2. 半球ライト (HemisphereLight) - 【調整】下からの光を強化し、陰を明るくする
-        const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x666666, 0.6); // 強度を0.4 -> 0.6に上げる
+        const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x666666, 0.6); 
         scene.add(hemisphereLight);
 
-        // 3. スポットライト (固定) - 【調整】強度を上げる
-        const spotLight = new THREE.SpotLight(0xffffff, 2.0); // 強度を1.5 -> 2.0に上げる
+        const spotLight = new THREE.SpotLight(0xffffff, 2.0); 
         spotLight.position.set(20, 100, 50); 
         spotLight.target.position.set(0, 10, 0);
         scene.add(spotLight);
         scene.add(spotLight.target);
 
-        // 4. オレンジポイントライト (固定)
         const ORANGE_POINT_COLOR = 0xffa500; 
-        const orangePointLight = new THREE.PointLight(ORANGE_POINT_COLOR, 5, 150); // 強度を4 -> 5に上げる
+        const orangePointLight = new THREE.PointLight(ORANGE_POINT_COLOR, 5, 150); 
         orangePointLight.position.set(0, 20, 0);
         scene.add(orangePointLight);
         // -----------------
@@ -352,7 +379,6 @@
         barGeometry.translate(0, 0.5, 0); 
         for (let i = 0; i < numStates; i++) {
             const material = new THREE.MeshStandardMaterial({
-                // 非ターゲットバーの色を少し明るくする
                 color: 0x333333, emissive: 0x000000, metalness: 0.5, roughness: 0.5, transparent: true, opacity: 0.9
             });
             const bar = new THREE.Mesh(barGeometry, material);
@@ -400,9 +426,9 @@
                 if (i === targetIndex) {
                     bar.material.color.setHex(0xff7300); 
                     bar.material.emissive.setHex(0xffa500);
-                    bar.material.emissiveIntensity = 0.8; // ターゲット発光を強化
+                    bar.material.emissiveIntensity = 0.8;
                 } else {
-                    bar.material.color.setHex(0x333333); // ベース色を0x222222 -> 0x333333に
+                    bar.material.color.setHex(0x333333); 
                     bar.material.emissive.setHex(0x000000);
                 }
             });
@@ -520,8 +546,8 @@
                 bars[i].scale.y = h;
                 
                 if (i === targetIndex) {
-                    bars[i].material.emissiveIntensity = 0.8 + h * 0.15; // 発光をさらに強化
-                    orangePointLight.intensity = 5 + h * 1; // ポイントライトの強度増加を強化
+                    bars[i].material.emissiveIntensity = 0.8 + h * 0.15;
+                    orangePointLight.intensity = 5 + h * 1;
                 }
             }
             draw2DPlane(currentAmps, targetIndex, numStates);
@@ -540,7 +566,6 @@
         
         function animate() {
             requestAnimationFrame(animate);
-            // バーのグループのみを回転させる
             barGroup.rotation.y += 0.002; 
             
             if (shakeIntensity > 0) {
