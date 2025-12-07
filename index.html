@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D量子振幅増幅シミュレーション (光源固定・確率表示付き)</title>
+    <title>3D量子振幅増幅シミュレーション (光源オレンジ・視認性向上)</title>
     <style>
         body {
             margin: 0;
@@ -19,17 +19,17 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 20px;
             border-radius: 10px;
-            border: 1px solid #00d4ff;
-            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            border: 1px solid #ff7300; /* UI枠の色もオレンジ系に合わせる */
+            box-shadow: 0 0 20px rgba(255, 115, 0, 0.3);
             min-width: 250px;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-        h2 { margin: 0; font-size: 1.2rem; color: #00d4ff; text-transform: uppercase; letter-spacing: 1px; }
+        h2 { margin: 0; font-size: 1.2rem; color: #ff7300; text-transform: uppercase; letter-spacing: 1px; }
         .info { font-size: 0.9rem; line-height: 1.6; }
         .label { color: #aaa; font-size: 0.8rem; letter-spacing: 1px; }
-        .target-num { color: #00d4ff; font-weight: bold; font-size: 1.2rem; margin-left: 5px; }
+        .target-num { color: #ff7300; font-weight: bold; font-size: 1.2rem; margin-left: 5px; }
         .prob-bar-container {
             width: 100%;
             height: 15px;
@@ -40,17 +40,17 @@
         }
         #probability-bar {
             height: 100%;
-            background: linear-gradient(90deg, #005eff, #00d4ff);
+            background: linear-gradient(90deg, #ff7300, #ffa500); /* バーもオレンジ系に */
             transition: width 0.3s ease;
         }
         .controls { display: flex; gap: 10px; }
         
         /* 2Dキャンバスのスタイル */
         #plane-container {
-            border: 1px solid #00d4ff;
+            border: 1px solid #ff7300;
             border-radius: 8px;
-            background: rgba(0, 50, 80, 0.3);
-            box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+            background: rgba(80, 50, 0, 0.3); /* 背景色も調整 */
+            box-shadow: 0 0 10px rgba(255, 115, 0, 0.3);
             padding: 5px;
         }
         #quantum-plane {
@@ -88,9 +88,12 @@
             color: #ccc;
             margin-left: 10px;
         }
-        .log-amp { color: #00d4ff; font-weight: bold; }
-        .log-angle { color: #ffeb3b; font-weight: bold; }
-        .log-prob { color: #ff4dff; font-weight: bold; }
+        /* ターゲット振幅: 青 -> オレンジ */
+        .log-amp { color: #ff7300; font-weight: bold; } 
+        /* 回転角度: 黄色 -> 変更なし */
+        .log-angle { color: #ffeb3b; font-weight: bold; } 
+        /* ターゲット確率: ピンク -> 明るいオレンジ */
+        .log-prob { color: #ffb347; font-weight: bold; } 
 
         button {
             padding: 12px 24px;
@@ -103,11 +106,12 @@
             text-transform: uppercase;
         }
         #btn-rotate {
-            background: linear-gradient(45deg, #00d4ff, #005eff);
+            /* ボタンもオレンジ系に */
+            background: linear-gradient(45deg, #ff7300, #ffa500); 
             color: #fff;
-            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+            box-shadow: 0 0 10px rgba(255, 115, 0, 0.5);
         }
-        #btn-rotate:hover { background: linear-gradient(45deg, #00a3cc, #004ecc); box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+        #btn-rotate:hover { background: linear-gradient(45deg, #cc5c00, #e08e00); box-shadow: 0 0 20px rgba(255, 115, 0, 0.8); }
         #btn-rotate:active { transform: scale(0.98); }
         #btn-reset { background-color: #333; color: #ccc; border: 1px solid #555; }
         #btn-reset:hover { background-color: #444; color: #fff; border-color: #777; }
@@ -210,6 +214,10 @@
         const center = planeSize / 2;
         const radius = planeSize * 0.45;
 
+        // ターゲットベクトルはオレンジにする
+        const TARGET_VECTOR_COLOR = '#ff7300'; 
+        const TARGET_LABEL_COLOR = '#ff7300';
+
         function drawVector(x, y, color, width) {
             ctx.beginPath();
             ctx.moveTo(0, 0);
@@ -246,7 +254,7 @@
             // 単位円
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+            ctx.strokeStyle = 'rgba(255, 115, 0, 0.2)'; // オレンジの薄い色
             ctx.stroke();
 
             // 軸の描画
@@ -257,7 +265,7 @@
             ctx.stroke();
 
             // ラベル
-            ctx.fillStyle = '#00d4ff';
+            ctx.fillStyle = TARGET_LABEL_COLOR;
             ctx.fillText("|ω⟩", 5, -radius - 5);
             ctx.fillText("|s'⟩", radius + 5, 5);
             
@@ -279,7 +287,7 @@
             const vectorX = componentSPrime * radius;
             const vectorY = componentOmega * -radius;
             
-            drawVector(vectorX, vectorY, '#00d4ff', 3);
+            drawVector(vectorX, vectorY, TARGET_VECTOR_COLOR, 3);
 
             // 角度計算
             const currentAngle = Math.atan2(componentSPrime, componentOmega);
@@ -309,22 +317,24 @@
         container.appendChild(renderer.domElement);
         
         // --- 光源の設定 ---
+        
         const ambientLight = new THREE.AmbientLight(0x333333);
         scene.add(ambientLight);
 
-        // スポットライト (固定)
+        const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x444444, 0.4);
+        scene.add(hemisphereLight);
+
         const spotLight = new THREE.SpotLight(0xffffff, 1.5);
-        // カメラの上前方に配置し、バーの中心を向ける
         spotLight.position.set(20, 100, 50); 
         spotLight.target.position.set(0, 10, 0);
         scene.add(spotLight);
-        scene.add(spotLight.target); // ターゲットを追加しないと光の向きが変わらない
+        scene.add(spotLight.target);
 
-        // ブルーポイントライト (固定)
-        const bluePointLight = new THREE.PointLight(0x00d4ff, 4, 150);
-        // バーの中心近くに配置し、ターゲットの増幅に応じて明るさだけを変える
-        bluePointLight.position.set(0, 20, 0);
-        scene.add(bluePointLight);
+        // 4. オレンジポイントライト (固定) - 【変更点】色の修正
+        const ORANGE_POINT_COLOR = 0xffa500; // オレンジ色
+        const orangePointLight = new THREE.PointLight(ORANGE_POINT_COLOR, 4, 150);
+        orangePointLight.position.set(0, 20, 0);
+        scene.add(orangePointLight);
         // -----------------
 
         const floorGeometry = new THREE.PlaneGeometry(300, 300);
@@ -387,10 +397,11 @@
             targetIndex = Math.floor(Math.random() * numStates);
             document.getElementById('target-index').innerText = targetIndex;
             
+            // ターゲットバーの色もオレンジ系に変更
             bars.forEach((bar, i) => {
                 if (i === targetIndex) {
-                    bar.material.color.setHex(0x00d4ff);
-                    bar.material.emissive.setHex(0x005eff);
+                    bar.material.color.setHex(0xff7300); 
+                    bar.material.emissive.setHex(0xffa500);
                     bar.material.emissiveIntensity = 0.5;
                 } else {
                     bar.material.color.setHex(0x222222);
@@ -512,8 +523,8 @@
                 
                 if (i === targetIndex) {
                     bars[i].material.emissiveIntensity = 0.5 + h * 0.1;
-                    bluePointLight.position.y = 10 + h * 2;
-                    bluePointLight.intensity = 2 + h * 0.5;
+                    // orangePointLight の強度を振幅に応じて変更
+                    orangePointLight.intensity = 2 + h * 0.5;
                 }
             }
             draw2DPlane(currentAmps, targetIndex, numStates);
@@ -532,9 +543,8 @@
         
         function animate() {
             requestAnimationFrame(animate);
-            // バーの回転は維持
+            // バーのグループのみを回転させる
             barGroup.rotation.y += 0.002; 
-            // 光源の位置は固定されているため、ここでは更新しない
             
             if (shakeIntensity > 0) {
                 camera.position.x += (Math.random() - 0.5) * shakeIntensity;
